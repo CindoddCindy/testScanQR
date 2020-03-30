@@ -1,9 +1,13 @@
 package com.ingenicomovement.scanqrtest;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.ViewUtils;
 
+import android.Manifest;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
@@ -11,64 +15,105 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.zxing.integration.android.IntentIntegrator;
-import com.google.zxing.integration.android.IntentResult;
-
-import org.json.JSONException;
-import org.json.JSONObject;
+import com.budiyev.android.codescanner.CodeScanner;
+import com.budiyev.android.codescanner.CodeScannerView;
+import com.budiyev.android.codescanner.DecodeCallback;
+import com.google.zxing.Result;
+import com.karumi.dexter.Dexter;
+import com.karumi.dexter.PermissionToken;
+import com.karumi.dexter.listener.PermissionDeniedResponse;
+import com.karumi.dexter.listener.PermissionGrantedResponse;
+import com.karumi.dexter.listener.PermissionRequest;
+import com.karumi.dexter.listener.single.PermissionListener;
 
 
 public class MainActivity extends AppCompatActivity {
-    private Button buttonScan;
-    private TextView textViewNama, textViewTinggi;
-
+    private CodeScanner mCodeScanner;
+    private CodeScannerView scannerView;
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        buttonScan = (Button) findViewById(R.id.buttonScan);
-        textViewNama = (TextView) findViewById(R.id.textViewNama);
-        textViewTinggi = (TextView) findViewById(R.id.textViewTinggi);
 
-        buttonScan.setOnClickListener(new View.OnClickListener() {
+        scannerView = findViewById(R.id.scanner_view);
+
+
+        mCodeScanner = new CodeScanner(this, scannerView);
+        mCodeScanner.setDecodeCallback(new DecodeCallback() {
             @Override
-            public void onClick(View v) {
-              IntentIntegrator  intentIntegrator = new IntentIntegrator(MainActivity.this);
-                intentIntegrator.initiateScan();
-
+            public void onDecoded(@NonNull final Result result) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        String message = "result :\n" + result.getText();
+                        showAlertDialog(message);
+                    }
+                });
             }
         });
 
+        checkCameraPermission();
+
+    }
+
+    private void checkCameraPermission(){
+        Dexter.withActivity(this)
+                .withPermission(Manifest.permission.CAMERA)
+                .withListener(new PermissionListener() {
+                    @Override
+                    public void onPermissionGranted(PermissionGrantedResponse response) {
+                        mCodeScanner.startPreview();
+                    }
+
+                    @Override
+                    public void onPermissionDenied(PermissionDeniedResponse response) {
+
+                    }
+
+                    @Override
+                    public void onPermissionRationaleShouldBeShown(PermissionRequest permission,
+                                                                   PermissionToken token) {
+                        token.continuePermissionRequest();
+                    }
+                })
+                .check();
+    }
+
+    private void showAlertDialog(String message){
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage(message);
+        builder.setCancelable(true);
+
+        builder.setPositiveButton(
+                "SCAN LAGI",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        dialog.cancel();
+                        mCodeScanner.startPreview();
+                    }
+                });
+
+        builder.setNegativeButton(
+                "CANCEL",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        dialog.cancel();
+                    }
+                });
+
+        AlertDialog alertDialog = builder.create();
+        alertDialog.show();
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
-        if (result != null){
-            if (result.getContents() == null){
-                Toast.makeText(this, "Hasil tidak ditemukan", Toast.LENGTH_SHORT).show();
-            }else{
-                // jika qrcode berisi data
-                try{
-                    // converting the data json
-                    JSONObject object = new JSONObject(result.getContents());
-                    // atur nilai ke textviews
-                    textViewNama.setText(object.getString("nama"));
-                    textViewTinggi.setText(object.getString("tinggi"));
-                }catch (JSONException e){
-                    e.printStackTrace();
-                    // jika format encoded tidak sesuai maka hasil
-                    // ditampilkan ke toast
-                    Toast.makeText(this, result.getContents(), Toast.LENGTH_SHORT).show();
-                }
-            }
-        }else{
+    protected void onResume() {
+        super.onResume();
+    }
 
-            super.onActivityResult(requestCode, resultCode, data);
-        }
-
-
+    @Override
+    protected void onPause() {
+        super.onPause();
     }
 }
